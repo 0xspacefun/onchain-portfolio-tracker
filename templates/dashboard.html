@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OnChain Portfolio Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%); }
+        .card-gradient { background: linear-gradient(145deg, rgba(30,30,50,0.9), rgba(20,20,35,0.95)); }
+        .glow-green { box-shadow: 0 0 20px rgba(16,185,129,0.3); }
+        .glow-blue { box-shadow: 0 0 20px rgba(59,130,246,0.3); }
+        .glow-purple { box-shadow: 0 0 20px rgba(139,92,246,0.3); }
+        .glow-orange { box-shadow: 0 0 20px rgba(249,115,22,0.3); }
+        .token-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px; }
+        .chain-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+        .eth-badge { background: rgba(98,126,234,0.2); color: #627eea; }
+        .base-badge { background: rgba(0,82,255,0.2); color: #0052ff; }
+        .arb-badge { background: rgba(40,160,240,0.2); color: #28a0f0; }
+        .op-badge { background: rgba(255,4,32,0.2); color: #ff0420; }
+        .bsc-badge { background: rgba(240,185,11,0.2); color: #f0b90b; }
+        .matic-badge { background: rgba(130,71,229,0.2); color: #8247e5; }
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .loader { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-black/30 backdrop-blur-xl border-b border-white/10">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg">OnChain Portfolio</h1>
+                    <p class="text-xs text-gray-400">Multi-chain tracker</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
+                    <span class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></span>
+                    <span class="text-sm text-green-400">Live</span>
+                </div>
+                <button onclick="refreshAll()" class="p-2 rounded-lg hover:bg-white/10 transition" title="Refresh">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="pt-24 px-6 pb-8 max-w-7xl mx-auto">
+        <!-- Total Portfolio Value Hero -->
+        <div class="mb-8">
+            <div class="card-gradient rounded-2xl p-8 border border-white/10">
+                <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total Portfolio Value</p>
+                        <h2 id="totalValue" class="text-5xl font-bold tracking-tight">Loading...</h2>
+                        <div id="changeDisplay" class="flex items-center gap-2 mt-3">
+                            <span class="text-green-400 text-sm font-medium">+0.00%</span>
+                            <span class="text-gray-500 text-sm">24h</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="openAddWalletModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl font-medium transition flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                            </svg>
+                            Add Wallet
+                        </button>
+                        <button onclick="exportPortfolio()" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl font-medium transition">
+                            Export
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Chain Breakdown -->
+                <div id="chainBreakdown" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-8">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Portfolio Distribution Pie -->
+            <div class="card-gradient rounded-2xl p-6 border border-white/10">
+                <h3 class="font-semibold mb-4">Distribution</h3>
+                <div id="distributionChart" class="h-64"></div>
+            </div>
+            
+            <!-- Chain Allocation -->
+            <div class="card-gradient rounded-2xl p-6 border border-white/10">
+                <h3 class="font-semibold mb-4">Chain Allocation</h3>
+                <div id="chainChart" class="h-64"></div>
+            </div>
+            
+            <!-- 24h Change -->
+            <div class="card-gradient rounded-2xl p-6 border border-white/10">
+                <h3 class="font-semibold mb-4">24h Changes</h3>
+                <div id="changeChart" class="h-64"></div>
+            </div>
+        </div>
+
+        <!-- Wallets Section -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold">Wallets</h3>
+                <span id="walletCount" class="text-sm text-gray-400">0 wallets</span>
+            </div>
+            <div id="walletsList" class="space-y-4">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- DeFi Positions -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold">DeFi Positions</h3>
+                <span class="text-sm text-gray-400">Staking, LP, Farming</span>
+            </div>
+            <div id="defiPositions" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold">Recent Transactions</h3>
+                <a href="/txhistory" class="text-blue-400 hover:text-blue-300 text-sm">View All →</a>
+            </div>
+            <div class="card-gradient rounded-2xl border border-white/10 overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-white/5">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Details</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Chain</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Amount</th>
+                            <th class="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="txTable" class="divide-y divide-white/5">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- NFT Gallery -->
+        <div>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold">NFT Gallery</h3>
+                <span id="nftCount" class="text-sm text-gray-400">0 items</span>
+            </div>
+            <div id="nftGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Wallet Modal -->
+    <div id="addWalletModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeAddWalletModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md">
+            <div class="card-gradient rounded-2xl p-6 border border-white/10">
+                <h3 class="text-xl font-semibold mb-6">Add Wallet</h3>
+                <form id="addWalletForm" onsubmit="addWallet(event)">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Wallet Address</label>
+                            <input type="text" id="walletAddress" placeholder="0x..." required 
+                                class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white placeholder-gray-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Chain</label>
+                            <select id="walletChain" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white">
+                                <option value="ethereum">Ethereum</option>
+                                <option value="base">Base</option>
+                                <option value="arbitrum">Arbitrum</option>
+                                <option value="optimism">Optimism</option>
+                                <option value="bsc">BSC</option>
+                                <option value="polygon">Polygon</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Label (optional)</label>
+                            <input type="text" id="walletLabel" placeholder="My Main Wallet" 
+                                class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:border-blue-500 focus:outline-none text-white placeholder-gray-500">
+                        </div>
+                    </div>
+                    <div class="flex gap-3 mt-6">
+                        <button type="button" onclick="closeAddWalletModal()" class="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition">Cancel</button>
+                        <button type="submit" class="flex-1 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition font-medium">Add Wallet</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wallet Detail Modal -->
+    <div id="walletDetailModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeWalletDetailModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="card-gradient rounded-2xl p-6 border border-white/10">
+                <div id="walletDetailContent">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeShareModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md">
+            <div class="card-gradient rounded-2xl p-6 border border-white/10">
+                <h3 class="text-xl font-semibold mb-4">Share Portfolio</h3>
+                <p class="text-gray-400 text-sm mb-4">Anyone with this link can view your public portfolio</p>
+                <div class="flex gap-2">
+                    <input type="text" id="shareLink" readonly class="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-gray-300">
+                    <button onclick="copyShareLink()" class="px-4 py-3 bg-blue-600 hover:bg-blue-500 rounded-xl transition">Copy</button>
+                </div>
+                <p id="copyConfirm" class="text-green-400 text-sm mt-2 hidden">Copied!</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 hidden">
+        <div class="px-6 py-4 rounded-xl bg-green-500/90 text-white font-medium shadow-lg">
+            <span id="toastMessage">Success!</span>
+        </div>
+    </div>
+
+    <script>
+        let portfolioData = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPortfolio();
+            setInterval(loadPortfolio, 60000); // Refresh every minute
+        });
+
+        async function loadPortfolio() {
+            try {
+                const resp = await fetch('/api/portfolio/summary');
+                const data = await resp.json();
+                if (data.success) {
+                    portfolioData = data;
+                    updateDashboard(data);
+                }
+            } catch (e) {
+                console.error('Failed to load portfolio:', e);
+                document.getElementById('totalValue').textContent = 'Error';
+            }
+        }
+
+        function updateDashboard(data) {
+            // Total value
+            document.getElementById('totalValue').textContent = formatCurrency(data.total_value_usd);
+            
+            // Chain breakdown
+            const chainContainer = document.getElementById('chainBreakdown');
+            const chains = data.chain_breakdown || {};
+            chainContainer.innerHTML = Object.entries(chains).map(([chain, info]) => `
+                <div class="bg-white/5 rounded-xl p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="chain-badge ${chain}-badge">${chain.toUpperCase()}</span>
+                    </div>
+                    <p class="text-xl font-bold">${formatCurrency(info.value_usd)}</p>
+                    <p class="text-xs text-gray-400">${info.count} wallet(s)</p>
+                </div>
+            `).join('');
+            
+            // Wallets list
+            document.getElementById('walletCount').textContent = `${data.wallet_count} wallets`;
+            const walletsList = document.getElementById('walletsList');
+            walletsList.innerHTML = data.wallets.map(w => `
+                <div class="card-gradient rounded-xl p-5 border border-white/10 hover:border-white/20 transition cursor-pointer" onclick="openWalletDetail('${w.address}', '${w.chain}')">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-lg font-bold">
+                                ${w.address.slice(2,4).toUpperCase()}
+                            </div>
+                            <div>
+                                <p class="font-medium">${w.label || 'Unnamed Wallet'}</p>
+                                <p class="text-sm text-gray-400 font-mono">${shortenAddress(w.address)}</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xl font-bold">${formatCurrency(w.total_value_usd)}</p>
+                            <span class="chain-badge ${w.chain}-badge">${w.chain.toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        ${w.items.map(item => `
+                            <span class="px-3 py-1.5 rounded-lg bg-white/5 text-sm">
+                                ${item.symbol}: ${formatNumber(item.balance, 4)} (${formatCurrency(item.value_usd)})
+                            </span>
+                        `).join('')}
+                    </div>
+                    <div class="mt-4 flex gap-2">
+                        <button onclick="event.stopPropagation(); openShare('${w.public_id}')" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                            </svg>
+                            Share
+                        </button>
+                        <button onclick="event.stopPropagation(); viewOnExplorer('${w.address}', '${w.chain}')" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm transition">
+                            View on Explorer →
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            // Charts
+            updateCharts(data);
+        }
+
+        function updateCharts(data) {
+            // Distribution pie chart
+            const allItems = {};
+            data.wallets.forEach(w => {
+                w.items.forEach(item => {
+                    if (!allItems[item.symbol]) allItems[item.symbol] = 0;
+                    allItems[item.symbol] += item.value_usd;
+                });
+            });
+            
+            const pieData = [{
+                values: Object.values(allItems),
+                labels: Object.keys(allItems),
+                type: 'pie',
+                hole: 0.5,
+                marker: { colors: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'] }
+            }];
+            Plotly.newPlot('distributionChart', pieData, { 
+                paper_bgcolor: 'transparent', 
+                plot_bgcolor: 'transparent',
+                legend: { orientation: 'h', y: -0.1 },
+                font: { color: '#9ca3af' }
+            });
+            
+            // Chain allocation bar chart
+            const chainData = Object.entries(data.chain_breakdown || {});
+            const barTrace = {
+                x: chainData.map(([k]) => k.toUpperCase()),
+                y: chainData.map(([, v]) => v.value_usd),
+                type: 'bar',
+                marker: { color: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'] }
+            };
+            Plotly.newPlot('chainChart', [barTrace], {
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                font: { color: '#9ca3af' },
+                yaxis: { gridcolor: 'rgba(255,255,255,0.1)' }
+            });
+            
+            // Change chart (placeholder data)
+            const changeTrace = {
+                x: ['ETH', 'USDC', 'USDT', 'WBTC', 'OTHER'],
+                y: [2.5, 0.1, 0.05, 1.2, 0],
+                type: 'bar',
+                marker: { color: ['#10b981', '#3b82f6', '#3b82f6', '#10b981', '#6b7280'] }
+            };
+            Plotly.newPlot('changeChart', [changeTrace], {
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                font: { color: '#9ca3af' },
+                yaxis: { gridcolor: 'rgba(255,255,255,0.1)', ticksuffix: '%' }
+            });
+        }
+
+        function openAddWalletModal() {
+            document.getElementById('addWalletModal').classList.remove('hidden');
+        }
+
+        function closeAddWalletModal() {
+            document.getElementById('addWalletModal').classList.add('hidden');
+        }
+
+        async function addWallet(e) {
+            e.preventDefault();
+            const address = document.getElementById('walletAddress').value;
+            const chain = document.getElementById('walletChain').value;
+            const label = document.getElementById('walletLabel').value;
+            
+            try {
+                const resp = await fetch('/api/wallet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address, chain, label })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    closeAddWalletModal();
+                    showToast('Wallet added successfully!');
+                    loadPortfolio();
+                } else {
+                    showToast(data.error || 'Failed to add wallet', true);
+                }
+            } catch (e) {
+                showToast('Failed to add wallet', true);
+            }
+        }
+
+        async function openWalletDetail(address, chain) {
+            const resp = await fetch(`/api/wallet/${address}/balance?chain=${chain}`);
+            const data = await resp.json();
+            
+            if (data.success) {
+                const bal = data.balance;
+                const content = `
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-xl font-semibold">${shortenAddress(address)}</h3>
+                        <button onclick="closeWalletDetailModal()" class="p-2 hover:bg-white/10 rounded-lg">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="mb-6">
+                        <p class="text-sm text-gray-400">Total Value</p>
+                        <p class="text-3xl font-bold">${formatCurrency(data.total_value_usd)}</p>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                            <div class="flex items-center gap-3">
+                                <div class="token-icon bg-blue-500/20 text-blue-400">Ξ</div>
+                                <span class="font-medium">${bal.native.symbol}</span>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-medium">${formatNumber(bal.native.balance, 6)}</p>
+                                <p class="text-sm text-gray-400">${formatCurrency(bal.native.value_usd)}</p>
+                            </div>
+                        </div>
+                        ${bal.tokens.map(t => `
+                            <div class="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                                <div class="flex items-center gap-3">
+                                    <div class="token-icon bg-purple-500/20 text-purple-400">${t.symbol.slice(0,2)}</div>
+                                    <span class="font-medium">${t.symbol}</span>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-medium">${formatNumber(t.balance, 4)}</p>
+                                    <p class="text-sm text-gray-400">${formatCurrency(t.value_usd)}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="mt-6 flex gap-3">
+                        <button onclick="viewOnExplorer('${address}', '${chain}')" class="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition">Explorer →</button>
+                        <button onclick="openShare('${address}')" class="flex-1 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 transition">Share</button>
+                    </div>
+                `;
+                document.getElementById('walletDetailContent').innerHTML = content;
+                document.getElementById('walletDetailModal').classList.remove('hidden');
+            }
+        }
+
+        function closeWalletDetailModal() {
+            document.getElementById('walletDetailModal').classList.add('hidden');
+        }
+
+        function openShare(publicId) {
+            const link = `${window.location.origin}/portfolio/${publicId}`;
+            document.getElementById('shareLink').value = link;
+            document.getElementById('shareModal').classList.remove('hidden');
+        }
+
+        function closeShareModal() {
+            document.getElementById('shareModal').classList.add('hidden');
+            document.getElementById('copyConfirm').classList.add('hidden');
+        }
+
+        function copyShareLink() {
+            const link = document.getElementById('shareLink').value;
+            navigator.clipboard.writeText(link);
+            document.getElementById('copyConfirm').classList.remove('hidden');
+            setTimeout(() => document.getElementById('copyConfirm').classList.add('hidden'), 2000);
+        }
+
+        function viewOnExplorer(address, chain) {
+            const explorers = {
+                ethereum: 'https://etherscan.io/address/',
+                base: 'https://basescan.org/address/',
+                arbitrum: 'https://arbiscan.io/address/',
+                optimism: 'https://optimistic.etherscan.io/address/',
+                bsc: 'https://bscscan.com/address/',
+                polygon: 'https://polygonscan.com/address/'
+            };
+            window.open(explorers[chain] + address, '_blank');
+        }
+
+        function refreshAll() {
+            loadPortfolio();
+            showToast('Refreshing...');
+        }
+
+        function exportPortfolio() {
+            if (!portfolioData) return;
+            const blob = new Blob([JSON.stringify(portfolioData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'portfolio-export.json';
+            a.click();
+            showToast('Portfolio exported!');
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            toast.querySelector('div').className = `px-6 py-4 rounded-xl ${isError ? 'bg-red-500/90' : 'bg-green-500/90'} text-white font-medium shadow-lg`;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
+        }
+
+        function formatNumber(num, decimals = 2) {
+            return parseFloat(num || 0).toFixed(decimals);
+        }
+
+        function shortenAddress(addr) {
+            if (!addr) return '';
+            return addr.slice(0, 6) + '...' + addr.slice(-4);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Public Portfolio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%); }
+        .card-gradient { background: linear-gradient(145deg, rgba(30,30,50,0.9), rgba(20,20,35,0.95)); }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <div class="max-w-4xl mx-auto px-6 py-12">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 mx-auto flex items-center justify-center mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                </svg>
+            </div>
+            <h1 id="portfolioLabel" class="text-3xl font-bold mb-2">Portfolio</h1>
+            <p id="walletAddress" class="text-gray-400 font-mono"></p>
+        </div>
+
+        <!-- Total Value -->
+        <div class="card-gradient rounded-2xl p-8 border border-white/10 text-center mb-8">
+            <p class="text-gray-400 text-sm mb-2">Total Value</p>
+            <h2 id="totalValue" class="text-5xl font-bold">Loading...</h2>
+        </div>
+
+        <!-- Tokens -->
+        <div class="mb-8">
+            <h3 class="text-xl font-semibold mb-4">Holdings</h3>
+            <div id="holdingsList" class="space-y-3">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-gray-500 text-sm">
+            <p>Powered by OnChain Portfolio Tracker</p>
+        </div>
+    </div>
+
+    <script>
+        async function loadPortfolio() {
+            const publicId = window.location.pathname.split('/').pop();
+            
+            try {
+                const resp = await fetch(`/api/portfolio/${publicId}`);
+                const data = await resp.json();
+                
+                if (data.success) {
+                    const p = data.portfolio;
+                    document.getElementById('portfolioLabel').textContent = p.label || 'Public Portfolio';
+                    document.getElementById('walletAddress').textContent = p.address;
+                    document.getElementById('totalValue').textContent = formatCurrency(p.total_value_usd);
+                    
+                    document.getElementById('holdingsList').innerHTML = p.items.map(item => `
+                        <div class="card-gradient rounded-xl p-4 border border-white/10 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold">
+                                    ${item.symbol.slice(0,2)}
+                                </div>
+                                <span class="font-medium">${item.symbol}</span>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-medium">${item.balance.toFixed(4)}</p>
+                                <p class="text-sm text-gray-400">${formatCurrency(item.value_usd)}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('totalValue').textContent = 'Not Found';
+                }
+            } catch (e) {
+                document.getElementById('totalValue').textContent = 'Error';
+            }
+        }
+
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num || 0);
+        }
+
+        loadPortfolio();
+    </script>
+</body>
+</html>
